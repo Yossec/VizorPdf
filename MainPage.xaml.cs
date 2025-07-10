@@ -1,39 +1,52 @@
-﻿using VizorPdf.helper;
+﻿#if MACCATALYST
+using CoreGraphics;
+using Foundation;
+using PdfKit;
+using UIKit;
+#endif
 
 namespace VizorPdf
 {
     public partial class MainPage : ContentPage
     {
-        private readonly PdfToImageConverter _pdfConverter = new PdfToImageConverter();
+
         public MainPage()
         {
             InitializeComponent();
-            LoadPdfAsImage();
+
+#if MACCATALYST
+            pdfImageView.Source = RenderPdfPageToImage("C:\\Users\\HP\\Desktop\\firma\\prueba.pdf", 0);
+#endif
         }
-        private async void LoadPdfAsImage()
+
+#if MACCATALYST
+        public ImageSource RenderPdfPageToImage(string pdfPath, int pageIndex)
         {
-            try
-            {
-                // Cambia esta ruta por la ubicación de tu PDF
-                string pdfPath = "C:/Users/HP/Desktop/firma/prueba.pdf";
+            using var url = new NSUrl(pdfPath, false);
+            using var doc = CGPDFDocument.FromFile(url.Path);
 
-                // Convertir la primera página (página 0) a imagen
-                var imageSource = await _pdfConverter.ConvertWithPdfium(pdfPath, 0);
+            if (doc == null || doc.Pages < pageIndex + 1)
+                return null;
 
-                if (imageSource != null)
-                {
-                    pdfImageView.Source = imageSource;
-                }
-                else
-                {
-                    await DisplayAlert("Error", "No se pudo convertir el PDF a imagen", "OK");
-                }
-            }
-            catch (Exception ex)
-            {
-                await DisplayAlert("Error", $"Ocurrió un error: {ex.Message}", "OK");
-            }
+            var page = doc.GetPage(pageIndex + 1); // 1-based index
+            var pageRect = page.GetBoxRect(CGPDFBox.Media);
+            var width = (int)pageRect.Width;
+            var height = (int)pageRect.Height;
+
+            UIGraphics.BeginImageContext(new CGSize(width, height));
+            var context = UIGraphics.GetCurrentContext();
+
+            context.SetFillColor(UIColor.White.CGColor);
+            context.FillRect(new CGRect(0, 0, width, height));
+            context.TranslateCTM(0, height);
+            context.ScaleCTM(1, -1);
+
+            context.DrawPDFPage(page);
+            var image = UIGraphics.GetImageFromCurrentImageContext();
+            UIGraphics.EndImageContext();
+
+            return ImageSource.FromStream(() => image.AsPNG().AsStream());
         }
-
+#endif
     }
 }
